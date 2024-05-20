@@ -1,0 +1,18 @@
+I will develop a  rock-paper-scissors game in ARMv7 DE1-SoC.
+Ot should use a Seven Segment display to display scores and choosing of the machine and the user.
+Users should use switches to decide on one of the rock-paper-scissors, and the machine chooses one
+ of it randomly. Both should show up in the seven segment display. After that, according to the logic
+  of the game, the winner should get 1 point. Points should also be shown in the seven segments.
+   Users should be able to use switches to restart the game(erase scores and start again) or start
+    the next round.
+
+HEX0 --> Users Move
+HEX1  --> Machine Move
+HEX2-3  --> User score
+HEX4-5  --> Machine Score
+
+Switch 0 --> Rock 
+Switch 1 --> Paper
+Switch 2 --> Scissors
+Switch 3 --> Start the round
+Switch 4 --> Restart

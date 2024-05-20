@@ -1,0 +1,4 @@
+Use push buttons and timer to generate random numbers.
+Use push buttons to lock the users choice for the round.
+Use push buttons to pass the turn to the next round.
+Use push buttons to reset the game.
