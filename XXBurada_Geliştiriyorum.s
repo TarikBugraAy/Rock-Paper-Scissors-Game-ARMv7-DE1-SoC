@@ -2,10 +2,9 @@
 .equ SEG_BASE_2, 0xFF200030  @ For HEX4 and HEX5
 .equ SWITCH_BASE, 0xFF200040 @ base address of the switches
 .equ TIMER_BASE, 0xFFFEC600  @ base address of the private timer
-.equ TIMER_LOAD, 0xFFFEC604  @ timer load register
+.equ TIMER_VALUE, 0xFFFEC604  @ timer current value
 .equ TIMER_CONTROL, 0xFFFEC608 @ timer control register
-.equ TIMER_INTCLR, 0xFFFEC60C @ timer interrupt clear register
-.equ TIMER_VALUE, 0xFFFEC60C @ timer value register
+.equ TIMER_INTCLR, 0xFFFEC60C @ timer interrupt status
 
 .data
 RPS:
@@ -13,8 +12,8 @@ RPS:
     .word 0b01110011   @ P
     .word 0b01101101   @ S
 WINNER:
-    .word 0b00111110   @ u (User wins)
-    .word 0b01010101   @ m (Machine wins)
+    .word 0b00111110   @User wins
+    .word 0b01010101   @Machine wins
 HEXTABLE:
     .word 0b00111111   // 0
     .word 0b00000110   // 1
@@ -27,9 +26,11 @@ HEXTABLE:
     .word 0b01111111   // 8
     .word 0b01101111   // 9
 
-.bss
-user_score: .word 0
-machine_score: .word 0
+
+.scoreuser:
+    .word 0
+.scoremachine:
+    .word 0
 
 .text
 .global _start
@@ -46,25 +47,27 @@ main_loop:
     BEQ main_loop
     BL get_timer_value
     BL display_choices
-    BL update_score_and_check_winner
     BL wait_for_next_round
     B main_loop
 
 initialize:
     @ Set up initial display
     MOV r0, #0
-    LDR r1, =SEG_BASE
-    STR r0, [r1]               @ Clear the seven-segment
+    LDR r2, =HEXTABLE
+    LDR r2, [r2, r0, LSL #2]   @ Load 0 from HEXTABLE
     LDR r1, =SEG_BASE_2
-    STR r0, [r1]               @ Clear HEX4 and HEX5
+    ORR r0,r0,r2, LSL #8      @ Load 0 to seven-segment display
+    ORR r0,r0,r2
+    STR r0, [r1]               @ Write 0 to seven-segment display
     BX lr
 
 initialize_timer:
     LDR r1, =TIMER_BASE
     LDR r0, =0xFFFFFFFF        @ Load maximum value to timer
-    STR r0, [r1, #0x04]
-    MOV r0, #0x7               @ Enable timer, periodic mode, and interrupt
-    STR r0, [r1, #0x08]
+    STR r0, [r1]
+    MOV r0, #3
+    LDR r1, =TIMER_CONTROL
+    STR r0, [r1]               @ Enable and auto-reload timer
     BX lr
 
 read_user_input:
@@ -102,11 +105,11 @@ display_choices:
     PUSH {r4, r5}             @ Save r4 and r5
     LDR r3, =RPS
     @ Display user choice
-    CMP r2, #0
-    BEQ display_r_user
     CMP r2, #1
-    BEQ display_P_user
+    BEQ display_r_user
     CMP r2, #2
+    BEQ display_P_user
+    CMP r2, #4
     BEQ display_S_user
     B clear_display_user
 
@@ -161,99 +164,6 @@ combine_and_display:
     POP {r4, r5}              @ Restore r4 and r5
     BX lr
 
-update_score_and_check_winner:
-    @ Determine the winner of the round
-    @ Assuming 0: rock, 1: paper, 2: scissors
-    @ r2: user choice, r0: machine choice
-    CMP r2, r0
-    BEQ no_winner             @ Tie case
-    CMP r2, #0
-    BEQ check_machine_scissors
-    CMP r2, #1
-    BEQ check_machine_rock
-    CMP r2, #2
-    BEQ check_machine_paper
-
-check_machine_scissors:
-    CMP r0, #2
-    BEQ user_wins
-    B machine_wins
-
-check_machine_rock:
-    CMP r0, #0
-    BEQ user_wins
-    B machine_wins
-
-check_machine_paper:
-    CMP r0, #1
-    BEQ user_wins
-    B machine_wins
-
-user_wins:
-    LDR r1, =user_score
-    LDR r2, [r1]
-    ADD r2, r2, #1
-    STR r2, [r1]
-    B check_final_score
-
-machine_wins:
-    LDR r1, =machine_score
-    LDR r2, [r1]
-    ADD r2, r2, #1
-    STR r2, [r1]
-    B check_final_score
-
-no_winner:
-    B check_final_score
-
-check_final_score:
-    LDR r1, =user_score
-    LDR r2, [r1]
-    CMP r2, #3
-    BEQ user_is_winner
-    LDR r1, =machine_score
-    LDR r2, [r1]
-    CMP r2, #3
-    BEQ machine_is_winner
-    B update_score_display
-
-user_is_winner:
-    LDR r1, =SEG_BASE
-    LDR r0, =WINNER
-    LDR r0, [r0]
-    STR r0, [r1]
-    B reset_game
-
-machine_is_winner:
-    LDR r1, =SEG_BASE
-    LDR r0, =WINNER
-    LDR r0, [r0, #4]
-    STR r0, [r1]
-    B reset_game
-
-update_score_display:
-    @ Update the user score on HEX3
-    LDR r1, =user_score
-    LDR r2, [r1]
-    LDR r1, =HEXTABLE
-    LDR r3, [r1, r2, LSL #2]
-    LDR r1, =SEG_BASE
-    LDR r0, [r1]
-    BIC r0, r0, #(0x7F << 16)  @ Clear HEX3
-    ORR r0, r0, r3, LSL #16    @ Set HEX3
-    STR r0, [r1]
-
-    @ Update the machine score on HEX5
-    LDR r1, =machine_score
-    LDR r2, [r1]
-    LDR r1, =HEXTABLE
-    LDR r3, [r1, r2, LSL #2]
-    LDR r1, =SEG_BASE_2
-    LDR r0, [r1]
-    BIC r0, r0, #(0x7F << 8)   @ Clear HEX5
-    ORR r0, r0, r3, LSL #8     @ Set HEX5
-    STR r0, [r1]
-    BX lr
 
 wait_for_next_round:
     @ Wait until push button 1 is pressed
@@ -263,12 +173,4 @@ wait_loop:
     AND r0, r0, #0x2           @ Check if push button 1 is pressed
     CMP r0, #0
     BEQ wait_loop
-    BX lr
-
-reset_game:
-    MOV r0, #0
-    LDR r1, =user_score
-    STR r0, [r1]
-    LDR r1, =machine_score
-    STR r0, [r1]
     BX lr

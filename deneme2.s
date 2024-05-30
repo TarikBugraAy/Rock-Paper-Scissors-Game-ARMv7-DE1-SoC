@@ -1,51 +1,7 @@
-Use push buttons and timer to generate random numbers.
-Use push buttons to lock the users choice for the round.
-Use push buttons to pass the turn to the next round.
-Use push buttons to reset the game.
-
-
-
-I am doing a rock paper-paper-scissors game in ARMv7 DE1-SoC.
- Game will be played agains machine. User choses from rock-paper-scissors by swithes.
-  Then to start the round user pushes push button 0. When this happens to make machine
-   choose from rock-paper-scissors we use Cortex-A9 Private Timer. Timer runs always from the start.
-    We take a value from timer and we use that value to randomly choose
-     from rock-paper-scissors for machine.  After that scor is incrementted
-      for machine or user or neither acorrding to the logic of the rock-paper-scissors game.
-       HEX0 shows users choice, HEX1 shows machines, HEX2 and HEX3 shows
-       score of the user and HEX4 and HEX5 shows score of the machine.
-        After the scores are updated if we push the pushbuttons
-         1 we move on to the next round, or if we push to the psuhbutton
-          2 we restard the game (scores cleared).
-           Rşght now my code takkes both inputs from users.
-
-First one who reaches score 3 wins. Then we display winner on seven segment by 
-        displaying u for user and m for machine. If user wins we display u, if machine wins we display m.
-
-        **GPT YE AT AŞAĞIDAKİNİ KOMPLE**
-
-        I am doing a rock paper-paper-scissors game in ARMv7 DE1-SoC.
- Game will be played agains machine. User choses from rock-paper-scissors by swithes.
-  Then to start the round user pushes push button 0. When this happens to make machine
-   choose from rock-paper-scissors we use Cortex-A9 Private Timer. Timer runs always from the start.
-    We take a value from timer and we use that value to randomly choose
-     from rock-paper-scissors for machine.  After that scor is incrementted
-      for machine or user or neither acorrding to the logic of the rock-paper-scissors game.
-       HEX0 shows users choice, HEX1 shows machines, HEX2 and HEX3 shows
-       score of the user and HEX4 and HEX5 shows score of the machine.
-        After the scores are updated if we push the pushbuttons
-         1 we move on to the next round, or if we push to the psuhbutton
-          2 we restard the game (scores cleared).
-           Rşght now my code takkes both inputs from users.
-
-First one who reaches score 3 wins. Then we display winner on seven segment by 
-        displaying u for user and m for machine. If user wins we display u, if machine wins we display m.
-
-My code is not working properly. PLease fix it 
-
 .equ SEG_BASE, 0xFF200020    @ base address of the seven-segment display
 .equ SEG_BASE_2, 0xFF200030  @ For HEX4 and HEX5
 .equ SWITCH_BASE, 0xFF200040 @ base address of the switches
+.equ BUTTON_BASE, 0xFF200050 @ base address of the push buttons
 .equ TIMER_BASE, 0xFFFEC600  @ base address of the private timer
 .equ TIMER_LOAD, 0xFFFEC604  @ timer load register
 .equ TIMER_CONTROL, 0xFFFEC608 @ timer control register
@@ -55,7 +11,7 @@ My code is not working properly. PLease fix it
 .data
 RPS:
     .word 0b01010000   @ r
-    .word 0b01110011   @ P
+    .word 0b01110000   @ P
     .word 0b01101101   @ S
 WINNER:
     .word 0b00111110   @ u (User wins)
@@ -84,15 +40,11 @@ _start:
     BL initialize_timer
 main_loop:
     BL read_user_input
-    LDR r1, =0xFF200050        @ Base address for push buttons
-    LDR r0, [r1]
-    AND r0, r0, #0x1           @ Check if push button 0 is pressed
-    CMP r0, #0
-    BEQ main_loop
+    BL wait_for_start_round
     BL get_timer_value
     BL display_choices
     BL update_score_and_check_winner
-    BL wait_for_next_round
+    BL wait_for_next_round_or_reset
     B main_loop
 
 initialize:
@@ -116,7 +68,16 @@ read_user_input:
     LDR r1, =SWITCH_BASE
     LDR r0, [r1]
     AND r0, r0, #0x7           @ Mask switches 0, 1, and 2 for user choice
-    MOV r2, r0                @ Store user choice in r2
+    MOV r2, r0                 @ Store user choice in r2
+    BX lr
+
+wait_for_start_round:
+    LDR r1, =BUTTON_BASE
+wait_loop_start:
+    LDR r0, [r1]
+    AND r0, r0, #0x1           @ Check if push button 0 is pressed
+    CMP r0, #0
+    BEQ wait_loop_start
     BX lr
 
 get_timer_value:
@@ -249,7 +210,7 @@ machine_wins:
     B check_final_score
 
 no_winner:
-    B check_final_score
+    BX lr
 
 check_final_score:
     LDR r1, =user_score
@@ -300,14 +261,21 @@ update_score_display:
     STR r0, [r1]
     BX lr
 
-wait_for_next_round:
-    @ Wait until push button 1 is pressed
-    LDR r1, =0xFF200050        @ Base address for push buttons
-wait_loop:
+wait_for_next_round_or_reset:
+    @ Wait until push button 1 (next round) or push button 2 (reset) is pressed
+    LDR r1, =BUTTON_BASE
+wait_loop_next_or_reset:
     LDR r0, [r1]
-    AND r0, r0, #0x2           @ Check if push button 1 is pressed
-    CMP r0, #0
-    BEQ wait_loop
+    AND r2, r0, #0x2           @ Check if push button 1 is pressed
+    CMP r2, #0
+    BEQ check_reset_button
+    BX lr
+
+check_reset_button:
+    AND r2, r0, #0x4           @ Check if push button 2 is pressed
+    CMP r2, #0
+    BEQ wait_loop_next_or_reset
+    BL reset_game
     BX lr
 
 reset_game:
@@ -316,4 +284,5 @@ reset_game:
     STR r0, [r1]
     LDR r1, =machine_score
     STR r0, [r1]
+    BL initialize             @ Clear display and reset scores
     BX lr
