@@ -1,4 +1,4 @@
-//deneme2.s is latest version.
+
 //This version is exits as a checkpoint for the project.
 
 
