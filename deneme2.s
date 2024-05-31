@@ -1,21 +1,22 @@
+//Sadece final winner eklenmeli
+
+
 .equ SEG_BASE, 0xFF200020    @ base address of the seven-segment display
 .equ SEG_BASE_2, 0xFF200030  @ For HEX4 and HEX5
 .equ SWITCH_BASE, 0xFF200040 @ base address of the switches
-.equ BUTTON_BASE, 0xFF200050 @ base address of the push buttons
 .equ TIMER_BASE, 0xFFFEC600  @ base address of the private timer
-.equ TIMER_LOAD, 0xFFFEC604  @ timer load register
+.equ TIMER_VALUE, 0xFFFEC604  @ timer current value
 .equ TIMER_CONTROL, 0xFFFEC608 @ timer control register
-.equ TIMER_INTCLR, 0xFFFEC60C @ timer interrupt clear register
-.equ TIMER_VALUE, 0xFFFEC60C @ timer value register
+
 
 .data
 RPS:
     .word 0b01010000   @ r
-    .word 0b01110000   @ P
+    .word 0b01110011   @ P
     .word 0b01101101   @ S
 WINNER:
-    .word 0b00111110   @ u (User wins)
-    .word 0b01010101   @ m (Machine wins)
+    .word 0b00111110   @User wins
+    .word 0b01010101   @Machine wins
 HEXTABLE:
     .word 0b00111111   // 0
     .word 0b00000110   // 1
@@ -28,9 +29,15 @@ HEXTABLE:
     .word 0b01111111   // 8
     .word 0b01101111   // 9
 
-.bss
-user_score: .word 0
-machine_score: .word 0
+scoreuser:
+    .word 0
+scoremachine:
+    .word 0
+
+user_choice:
+    .word 0
+machine_choice:
+    .word 0
 
 .text
 .global _start
@@ -40,47 +47,57 @@ _start:
     BL initialize_timer
 main_loop:
     BL read_user_input
-    BL wait_for_start_round
+    LDR r1, =0xFF200050        @ Base address for push buttons
+    LDR r0, [r1]
+    AND r0, r0, #0x1           @ Check if push button 0 is pressed
+    CMP r0, #0
+    BEQ main_loop
     BL get_timer_value
     BL display_choices
-    BL update_score_and_check_winner
-    BL wait_for_next_round_or_reset
+    BL decide_winner
+    BL display_score           @ Ensure scores are updated after each round
+    BL wait_for_next_round
     B main_loop
 
 initialize:
     @ Set up initial display
     MOV r0, #0
-    LDR r1, =SEG_BASE
-    STR r0, [r1]               @ Clear the seven-segment
+    LDR r2, =HEXTABLE
+    LDR r2, [r2, r0, LSL #2]   @ Load 0 from HEXTABLE
     LDR r1, =SEG_BASE_2
-    STR r0, [r1]               @ Clear HEX4 and HEX5
+    ORR r0, r0, r2, LSL #8      @ Load 0 to seven-segment display
+    ORR r0, r0, r2
+    STR r0, [r1]               @ Write 0 to seven-segment display
+	LDR r1, =SEG_BASE
+	LDR r2, =0b00001000
+	MOV r0, #0
+	ORR r0,r0,r2, LSL #8
+	ORR r0,r0,r2
+	STR r0, [r1]
     BX lr
 
 initialize_timer:
     LDR r1, =TIMER_BASE
     LDR r0, =0xFFFFFFFF        @ Load maximum value to timer
-    STR r0, [r1, #0x04]
-    MOV r0, #0x7               @ Enable timer, periodic mode, and interrupt
-    STR r0, [r1, #0x08]
+    STR r0, [r1]
+    MOV r0, #3
+    LDR r1, =TIMER_CONTROL
+    STR r0, [r1]               @ Enable and auto-reload timer
     BX lr
 
 read_user_input:
+    PUSH {r4, lr}
     LDR r1, =SWITCH_BASE
     LDR r0, [r1]
     AND r0, r0, #0x7           @ Mask switches 0, 1, and 2 for user choice
-    MOV r2, r0                 @ Store user choice in r2
-    BX lr
-
-wait_for_start_round:
-    LDR r1, =BUTTON_BASE
-wait_loop_start:
-    LDR r0, [r1]
-    AND r0, r0, #0x1           @ Check if push button 0 is pressed
-    CMP r0, #0
-    BEQ wait_loop_start
+    MOV r2, r0                @ Store user choice in r2
+    LDR r1, =user_choice
+    STR r2, [r1]              @ Store user choice in memory
+    POP {r4, lr}
     BX lr
 
 get_timer_value:
+    PUSH {r4, lr}
     LDR r1, =TIMER_VALUE
     LDR r0, [r1]               @ Read current timer value
     AND r0, r0, #0xF           @ Mask to get last four bits (values 0 to 15)
@@ -94,25 +111,36 @@ get_timer_value:
 
 choose_rock:
     MOV r0, #0
+    LDR r1, =machine_choice
+    STR r0, [r1]               @ Store machine choice in memory
+    POP {r4, lr}
     BX lr
 
 choose_paper:
     MOV r0, #1
+    LDR r1, =machine_choice
+    STR r0, [r1]               @ Store machine choice in memory
+    POP {r4, lr}
     BX lr
 
 choose_scissors:
     MOV r0, #2
+    LDR r1, =machine_choice
+    STR r0, [r1]               @ Store machine choice in memory
+    POP {r4, lr}
     BX lr
 
 display_choices:
-    PUSH {r4, r5}             @ Save r4 and r5
+    PUSH {r4, r5, lr}          @ Save r4, r5, and lr
+    LDR r1, =user_choice
+    LDR r2, [r1]               @ Load user choice from memory
     LDR r3, =RPS
     @ Display user choice
-    CMP r2, #0
-    BEQ display_r_user
     CMP r2, #1
-    BEQ display_P_user
+    BEQ display_r_user
     CMP r2, #2
+    BEQ display_P_user
+    CMP r2, #4
     BEQ display_S_user
     B clear_display_user
 
@@ -133,6 +161,8 @@ clear_display_user:
     B display_machine_choice
 
 display_machine_choice:
+    LDR r1, =machine_choice
+    LDR r0, [r1]               @ Load machine choice from memory
     @ Display machine choice
     CMP r0, #0
     BEQ display_r_machine
@@ -164,125 +194,141 @@ combine_and_display:
     ORR r0, r0, r4            @ Combine user choice (low byte)
     ORR r0, r0, r5, LSL #8    @ Combine machine choice (high byte)
     STR r0, [r1]              @ Write combined value to seven-segment display
-    POP {r4, r5}              @ Restore r4 and r5
+    POP {r4, r5, lr}          @ Restore r4, r5, and lr
     BX lr
 
-update_score_and_check_winner:
-    @ Determine the winner of the round
-    @ Assuming 0: rock, 1: paper, 2: scissors
-    @ r2: user choice, r0: machine choice
-    CMP r2, r0
-    BEQ no_winner             @ Tie case
-    CMP r2, #0
-    BEQ check_machine_scissors
+decide_winner:
+    PUSH {r4, r5, lr}         @ Save r4, r5, and lr
+
+    LDR r1, =user_choice
+    LDR r2, [r1]              @ Load user choice from memory
     CMP r2, #1
-    BEQ check_machine_rock
+    BEQ user_rock
     CMP r2, #2
-    BEQ check_machine_paper
+    BEQ user_paper
+    CMP r2, #4
+    BEQ user_scissors
+    B user_not_playing    @ Next round if user does not play
 
-check_machine_scissors:
-    CMP r0, #2
-    BEQ user_wins
-    B machine_wins
+user_rock:
+    MOV r4, #0
+    STR r4, [r1]              @ Store user choice in memory
+    B compare_choices
+user_paper:
+    MOV r4, #1
+    STR r4, [r1]              @ Store user choice in memory
+    B compare_choices
+user_scissors:
+    MOV r4, #2
+    STR r4, [r1]              @ Store user choice in memory
+    B compare_choices
 
-check_machine_rock:
+user_not_playing:
+    POP {r4, r5, lr}
+    BX lr
+
+compare_choices:
+    LDR r1, =machine_choice
+    LDR r0, [r1]              @ Load machine choice from memory
+    CMP r4, #0
+    BEQ rock
+    CMP r4, #1
+    BEQ paper
+    CMP r4, #2
+    BEQ scissors
+
+rock:
     CMP r0, #0
-    BEQ user_wins
-    B machine_wins
-
-check_machine_paper:
+    BEQ tie
     CMP r0, #1
-    BEQ user_wins
-    B machine_wins
+    BEQ machine_score
+    CMP r0, #2
+    BEQ user_score
 
-user_wins:
-    LDR r1, =user_score
-    LDR r2, [r1]
-    ADD r2, r2, #1
-    STR r2, [r1]
-    B check_final_score
+paper:
+    CMP r0, #0
+    BEQ user_score
+    CMP r0, #1
+    BEQ tie
+    CMP r0, #2
+    BEQ machine_score
 
-machine_wins:
-    LDR r1, =machine_score
-    LDR r2, [r1]
-    ADD r2, r2, #1
-    STR r2, [r1]
-    B check_final_score
+scissors:
+    CMP r0, #0
+    BEQ machine_score
+    CMP r0, #1
+    BEQ user_score
+    CMP r0, #2
+    BEQ tie
 
-no_winner:
+tie:
+    POP {r4, r5, lr}
     BX lr
 
-check_final_score:
-    LDR r1, =user_score
-    LDR r2, [r1]
-    CMP r2, #3
-    BEQ user_is_winner
-    LDR r1, =machine_score
-    LDR r2, [r1]
-    CMP r2, #3
-    BEQ machine_is_winner
-    B update_score_display
-
-user_is_winner:
-    LDR r1, =SEG_BASE
-    LDR r0, =WINNER
-    LDR r0, [r0]
-    STR r0, [r1]
-    B reset_game
-
-machine_is_winner:
-    LDR r1, =SEG_BASE
-    LDR r0, =WINNER
-    LDR r0, [r0, #4]
-    STR r0, [r1]
-    B reset_game
-
-update_score_display:
-    @ Update the user score on HEX3
-    LDR r1, =user_score
-    LDR r2, [r1]
-    LDR r1, =HEXTABLE
-    LDR r3, [r1, r2, LSL #2]
-    LDR r1, =SEG_BASE
+machine_score:
+    LDR r1, =scoremachine
     LDR r0, [r1]
-    BIC r0, r0, #(0x7F << 16)  @ Clear HEX3
-    ORR r0, r0, r3, LSL #16    @ Set HEX3
+    ADD r0, r0, #1
     STR r0, [r1]
+    POP {r4, r5, lr}
+    BX lr
 
-    @ Update the machine score on HEX5
-    LDR r1, =machine_score
-    LDR r2, [r1]
-    LDR r1, =HEXTABLE
-    LDR r3, [r1, r2, LSL #2]
+user_score:
+    LDR r1, =scoreuser
+    LDR r0, [r1]
+    ADD r0, r0, #1
+    STR r0, [r1]
+    POP {r4, r5, lr}
+    BX lr
+
+display_score:
+    PUSH {r4, r5, lr}         @ Save r4, r5, and lr
+
+    @ Display user score
+    LDR r1, =scoreuser
+    LDR r0, [r1]
+    LDR r2, =HEXTABLE
+    LDR r4, [r2, r0, LSL #2]  @ Load user score from HEXTABLE
+
+    @ Display machine score
+    LDR r1, =scoremachine
+    LDR r0, [r1]
+    LDR r2, =HEXTABLE
+    LDR r5, [r2, r0, LSL #2]  @ Load machine score from HEXTABLE
+
+    @ Combine and display scores
     LDR r1, =SEG_BASE_2
-    LDR r0, [r1]
-    BIC r0, r0, #(0x7F << 8)   @ Clear HEX5
-    ORR r0, r0, r3, LSL #8     @ Set HEX5
-    STR r0, [r1]
-    BX lr
-
-wait_for_next_round_or_reset:
-    @ Wait until push button 1 (next round) or push button 2 (reset) is pressed
-    LDR r1, =BUTTON_BASE
-wait_loop_next_or_reset:
-    LDR r0, [r1]
-    AND r2, r0, #0x2           @ Check if push button 1 is pressed
-    CMP r2, #0
-    BEQ check_reset_button
-    BX lr
-
-check_reset_button:
-    AND r2, r0, #0x4           @ Check if push button 2 is pressed
-    CMP r2, #0
-    BEQ wait_loop_next_or_reset
-    BL reset_game
-    BX lr
-
-reset_game:
     MOV r0, #0
-    LDR r1, =user_score
-    STR r0, [r1]
-    LDR r1, =machine_score
-    STR r0, [r1]
-    BL initialize             @ Clear display and reset scores
+    ORR r0, r0, r4            @ Combine user score (low byte)
+    ORR r0, r0, r5, LSL #8    @ Combine machine score (high byte)
+    STR r0, [r1]              @ Write combined value to seven-segment display
+
+    POP {r4, r5, lr}          @ Restore r4, r5, and lr
     BX lr
+
+wait_for_next_round:
+    @ Wait until push button 1 is pressed or reset if push button 2 is pressed
+    LDR r1, =0xFF200050        @ Base address for push buttons
+wait_loop:
+    LDR r0, [r1]
+    AND r0, r0, #0x2           @ Check if push button 1 is pressed
+    CMP r0, #0x2
+    BEQ continue_execution
+    LDR r2, [r1]
+    AND r2, r2, #0x4           @ Check if push button 2 is pressed
+    CMP r2, #0x4
+    BEQ reset_handler
+
+    B wait_loop
+
+continue_execution:
+    BX lr
+
+reset_handler:
+
+    LDR r1, =scoreuser
+    MOV r0, #0
+    STR r0, [r1]               @ Reset user score
+    LDR r1, =scoremachine
+    STR r0, [r1]               @ Reset machine score
+    B initialize

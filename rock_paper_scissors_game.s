@@ -1,8 +1,3 @@
-//deneme2.s is latest version.
-//This version is exits as a checkpoint for the project.
-
-
-
 .equ SEG_BASE, 0xFF200020    @ base address of the seven-segment display
 .equ SEG_BASE_2, 0xFF200030  @ For HEX4 and HEX5
 .equ SWITCH_BASE, 0xFF200040 @ base address of the switches
@@ -58,6 +53,7 @@ main_loop:
     BL display_choices
     BL decide_winner
     BL display_score           @ Ensure scores are updated after each round
+    BL game_winner
     BL wait_for_next_round
     B main_loop
 
@@ -309,12 +305,81 @@ display_score:
     BX lr
 
 wait_for_next_round:
-    @ Wait until push button 1 is pressed
+    @ Wait until push button 1 is pressed or reset if push button 2 is pressed
     LDR r1, =0xFF200050        @ Base address for push buttons
 wait_loop:
     LDR r0, [r1]
     AND r0, r0, #0x2           @ Check if push button 1 is pressed
-    CMP r0, #0
-    BEQ wait_loop
+    CMP r0, #0x2
+    BEQ continue_execution
+    LDR r2, [r1]
+    AND r2, r2, #0x4           @ Check if push button 2 is pressed
+    CMP r2, #0x4
+    BEQ reset_handler
+
+    B wait_loop
+
+continue_execution:
     BX lr
 
+reset_handler:
+
+    LDR r1, =scoreuser
+    MOV r0, #0
+    STR r0, [r1]               @ Reset user score
+    LDR r1, =scoremachine
+    STR r0, [r1]               @ Reset machine score
+    B initialize
+
+game_winner:
+
+    LDR r1, =scoreuser
+    LDR r0, [r1]
+    MOV r3, #3
+    CMP r0, r3
+    BEQ user_wins         @ If user score is 3, user wins
+    LDR r1, =scoremachine
+    LDR r0, [r1]
+    CMP r0, r3
+    BEQ machine_wins      @ If machine score is 3, machine wins
+    B no_winner           @ If no winner, continue playing
+
+no_winner:
+
+    BX lr
+
+user_wins:
+    LDR r1, =WINNER
+    LDR r0, [r1]
+    LDR r1, =SEG_BASE
+    STR r0, [r1]              @ Write user wins to seven-segment display
+    LDR r1, =scoreuser
+    MOV r0, #0
+    STR r0, [r1]               @ Reset user score
+    LDR r1, =scoremachine
+    STR r0, [r1]               @ Reset machine score
+    LDR r1, =0xFF200050        @ Base address for push buttons
+    LDR r0, [r1]
+    AND r0, r0, #0x8           @ Check if push button 3 is pressed
+    CMP r0, #0
+    BEQ user_wins
+
+    B _start
+
+machine_wins:
+    LDR r1, =WINNER
+    LDR r0, [r1, #4]
+    LDR r1, =SEG_BASE
+    STR r0, [r1]              @ Write machine wins to seven-segment display
+    LDR r1, =scoreuser
+    MOV r0, #0
+    STR r0, [r1]               @ Reset user score
+    LDR r1, =scoremachine
+    STR r0, [r1]               @ Reset machine score
+    LDR r1, =0xFF200050        @ Base address for push buttons
+    LDR r0, [r1]
+    AND r0, r0, #0x8           @ Check if push button 3 is pressed
+    CMP r0, #0
+    BEQ machine_wins
+
+    B _start
