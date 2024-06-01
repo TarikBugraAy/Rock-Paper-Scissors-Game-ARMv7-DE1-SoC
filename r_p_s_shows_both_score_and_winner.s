@@ -332,7 +332,6 @@ reset_handler:
     B initialize
 
 game_winner:
-
     LDR r1, =scoreuser
     LDR r0, [r1]
     MOV r3, #3
@@ -349,10 +348,13 @@ no_winner:
     BX lr
 
 user_wins:
+
     LDR r1, =WINNER
     LDR r0, [r1]
     LDR r1, =SEG_BASE
-    STR r0, [r1]              @ Write user wins to seven-segment display
+    LDR r2, [r1]
+    ORR r2, r2, r0, LSL #16
+    STR r2, [r1]              @ Write user wins to seven-segment display
     LDR r1, =scoreuser
     MOV r0, #0
     STR r0, [r1]               @ Reset user score
@@ -370,7 +372,9 @@ machine_wins:
     LDR r1, =WINNER
     LDR r0, [r1, #4]
     LDR r1, =SEG_BASE
-    STR r0, [r1]              @ Write machine wins to seven-segment display
+    LDR r2, [r1]
+    ORR r2, r2, r0, LSL #16
+    STR r2, [r1]              @ Write user wins to seven-segment display
     LDR r1, =scoreuser
     MOV r0, #0
     STR r0, [r1]               @ Reset user score
