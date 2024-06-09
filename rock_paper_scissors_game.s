@@ -133,7 +133,7 @@ choose_scissors:                 // Machine chooses scissors
     BX lr                        // Return
 
 display_choices:                 // Display user and machine choices on the seven-segment display
-    PUSH {r4, r5, lr}            // Save r4, r5, and lr to the stack
+    PUSH {lr}                    // Save lr to the stack
     LDR r1, =user_choice         // Load the address of the user choice memory location
     LDR r2, [r1]                 // Load user choice from memory
     LDR r3, =RPS                 // Load the base address of the RPS array for user and machine choices
@@ -147,24 +147,24 @@ display_choices:                 // Display user and machine choices on the seve
     B move_to_the_next_round     // If user choice is not valid go to next round
 
 display_r_user:                  // Choose rock for user from RPS array to display
-    LDR r4, [r3]                 // Load 'R' for user from RPS array
+    LDR r1, [r3]                 // Load 'R' for user from RPS array
     B display_machine_choice     // Select machine choice from RPS array
 
 display_P_user:                  // Choose paper for user from RPS array to display
-    LDR r4, [r3, #4]             // Load 'P' for user from RPS array
+    LDR r1, [r3, #4]             // Load 'P' for user from RPS array
     B display_machine_choice     // Select machine choice from RPS array
 
 display_S_user:                  // Choose scissors for user from RPS array to display
-    LDR r4, [r3, #8]             // Load 'S' for user from RPS array
+    LDR r1, [r3, #8]             // Load 'S' for user from RPS array
     B display_machine_choice     // Select machine choice from RPS array
 
 move_to_the_next_round:          // Move to the next round if user choice is not valid (push button 1 for next round or push button 2 to reset game)
-    POP {r4, r5, lr}             // Restore r4, r5, and lr
+    POP {lr}                     // Restore lr from the stack
     BX lr                        // Return to the main loop
 
 display_machine_choice:          // Choose machine choice from RPS array to display
-    LDR r1, =machine_choice      // Load the address of the machine choice memory location
-    LDR r0, [r1]                 // Load machine choice from memory
+    LDR r2, =machine_choice      // Load the address of the machine choice memory location
+    LDR r0, [r2]                 // Load machine choice from memory
     CMP r0, #0                   // Check machine choice for rock
     BEQ display_r_machine        // If machine choice is rock, display rock
     CMP r0, #1                   // Check machine choice for paper
@@ -174,28 +174,28 @@ display_machine_choice:          // Choose machine choice from RPS array to disp
     B clear_display_machine      // If machine choice is not valid, clear display
 
 display_r_machine:               // Choose rock for machine from RPS array to display
-    LDR r5, [r3]                 // Load 'R' for machine from RPS array
+    LDR r2, [r3]                 // Load 'R' for machine from RPS array
     B combine_and_display        // Combine and display user and machine choices
 
 display_P_machine:               // Choose paper for machine from RPS array to display
-    LDR r5, [r3, #4]             // Load 'P' for machine from RPS array
+    LDR r2, [r3, #4]             // Load 'P' for machine from RPS array
     B combine_and_display        // Combine and display user and machine choices
 
 display_S_machine:               // Choose scissors for machine from RPS array to display
-    LDR r5, [r3, #8]             // Load 'S' for machine from RPS array
+    LDR r2, [r3, #8]             // Load 'S' for machine from RPS array
     B combine_and_display        // Combine and display user and machine choices
 
 clear_display_machine:           // Clear the display if machine choice is not valid
-    MOV r5, #0                   // Choose blank value to clear the display
+    MOV r2, #0                   // Choose blank value to clear the display
     B combine_and_display        // Combine and display user and machine choices
 
 combine_and_display:             // Combine and display user and machine choices on the seven-segment display
-    LDR r1, =SEG_BASE            // Load the base address of the seven-segment display for HEX0, HEX1, HEX2, and HEX3
+    LDR r3, =SEG_BASE            // Load the base address of the seven-segment display for HEX0, HEX1, HEX2, and HEX3
     MOV r0, #0                   // Clear the r0 register to combine user and machine choices
-    ORR r0, r0, r4               // Add user choice to r0's 0-7 bits
-    ORR r0, r0, r5, LSL #8       // Add machine choice to r0's 8-15 bits
-    STR r0, [r1]                 // Write combined value to seven-segment display
-    POP {r4, r5, lr}             // Restore r4, r5, and lr from the stack
+    ORR r0, r0, r1               // Add user choice to r0's 0-7 bits
+    ORR r0, r0, r2, LSL #8       // Add machine choice to r0's 8-15 bits
+    STR r0, [r3]                 // Write combined value to seven-segment display
+    POP {lr}                     // Restore lr from the stack
     BX lr                        // Return to the main loop
 
 decide_winner:                   // Decide the winner of the round based on user and machine choices
@@ -203,42 +203,16 @@ decide_winner:                   // Decide the winner of the round based on user
 
     LDR r1, =user_choice         // Load the address of the user choice memory location
     LDR r2, [r1]                 // Load user choice from memory
-    CMP r2, #1                   // Check user choice for rock
-    BEQ user_rock                // If user choice is rock, go to user_rock
-    CMP r2, #2                   // Check user choice for paper
-    BEQ user_paper               // If user choice is paper, go to user_paper
-    CMP r2, #4                   // Check user choice for scissors
-    BEQ user_scissors            // If user choice is scissors, go to user_scissors
-    B user_not_playing           // If user choice is not valid, go to user_not_playing
-
-// user_rock, user_paper, and user_scissors are for turning values of user choice to be able to compare it with machine choice(1, 2, 4 to 0, 1, 2)
-user_rock:                       // User choice is rock
-    MOV r4, #0                   // Turn the value of user for rock, from 1 to 0 to be able to compare it with machine choice.
-    STR r4, [r1]                 // Store the reassigned value of user choice in memory
-    B compare_choices            // Compare user and machine choices to decide the winner of the round
-
-user_paper:                      // User choice is paper
-    MOV r4, #1                   // Turn the value of user for paper, from 2 to 1 to be able to compare it with machine choice.
-    STR r4, [r1]                 // Store the reassigned value of user choice in memory
-    B compare_choices            // Compare user and machine choices to decide the winner of the round
-
-user_scissors:                   // User choice is scissors
-    MOV r4, #2                   // Turn the value of user for scissors, from 4 to 2 to be able to compare it with machine choice.
-    STR r4, [r1]                 // Store the reassigned value of user choice in memory
-    B compare_choices            // Compare user and machine choices to decide the winner of the round
-
-user_not_playing:                // User is choose for the round
-    POP {r4, r5, lr}             // Restore r4, r5, and lr from the stack
-    BX lr                        // Return to the main loop
+    B compare_choices            // Branch to compare_choices to compare user and machine choices
 
 compare_choices:                 // Compare user and machine choices to decide the winner of the round
     LDR r1, =machine_choice      // Load the address of the machine choice memory location
     LDR r0, [r1]                 // Load machine choice from memory
-    CMP r4, #0                   // Check user choice for rock
+    CMP r2, #1                   // Check user choice for rock
     BEQ rock                     // If user choice is rock, go to rock
-    CMP r4, #1                   // Check user choice for paper
+    CMP r2, #2                   // Check user choice for paper
     BEQ paper                    // If user choice is paper, go to paper
-    CMP r4, #2                   // Check user choice for scissors
+    CMP r2, #4                   // Check user choice for scissors
     BEQ scissors                 // If user choice is scissors, go to scissors
 
 rock:                            // Compeare machine choice for user choice rock to determine the winner of the round
